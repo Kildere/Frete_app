@@ -1,0 +1,71 @@
+import pandas as pd
+import streamlit as st
+
+from components.ui import page_header, section_header
+from services.demo_service import ensure_demo_data
+from services.motorista_service import criar_motorista, listar_motoristas
+
+
+st.set_page_config(
+    page_title="Motoristas | AgTransporte",
+    layout="wide",
+)
+
+
+def render_form() -> None:
+    """Renderiza o formulario de motoristas."""
+    ensure_demo_data()
+
+    page_header(
+        "Cadastro de motoristas",
+        "Organize rapidamente a base de motoristas disponiveis para a operacao.",
+    )
+
+    if st.session_state.pop("motorista_salvo", False):
+        st.success("Motorista salvo com sucesso.")
+
+    with st.form("form_motorista", clear_on_submit=True):
+        section_header("Dados do motorista", "Cadastre as informacoes necessarias para uso nos fretes.")
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome")
+            telefone = st.text_input("Telefone")
+        with col2:
+            cnh = st.text_input("CNH")
+
+        submitted = st.form_submit_button("Salvar motorista", use_container_width=True)
+
+    if submitted:
+        if not nome.strip():
+            st.error("Informe o nome do motorista.")
+        else:
+            try:
+                criar_motorista(
+                    {
+                        "nome": nome,
+                        "telefone": telefone,
+                        "cnh": cnh,
+                    }
+                )
+            except RuntimeError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["motorista_salvo"] = True
+                st.rerun()
+
+    try:
+        motoristas = listar_motoristas()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    section_header("Motoristas cadastrados", "Consulta rapida da equipe disponivel.")
+    if not motoristas:
+        st.info("Nenhum motorista cadastrado ainda.")
+        st.caption("Use o formulario acima para registrar o primeiro motorista.")
+        return
+
+    st.dataframe(pd.DataFrame(motoristas), use_container_width=True, hide_index=True)
+
+
+render_form()

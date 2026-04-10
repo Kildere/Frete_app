@@ -1,0 +1,242 @@
+import pandas as pd
+import streamlit as st
+
+from services.frete_service import atualizar_status_frete, listar_fretes
+from utils.frete_status import STATUS_OPTIONS
+
+
+st.set_page_config(
+    page_title="Dashboard | AgTransporte",
+    layout="wide",
+)
+
+
+def build_fretes_dataframe() -> pd.DataFrame:
+    """Monta a base real de fretes cadastrados."""
+    fretes = listar_fretes()
+    if not fretes:
+        return pd.DataFrame()
+
+    dataframe = pd.DataFrame(fretes)
+    dataframe["created_at"] = pd.to_datetime(dataframe["created_at"], errors="coerce")
+    dataframe["created_date"] = dataframe["created_at"].dt.date
+    dataframe["created_at_display"] = dataframe["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+    dataframe["created_at_display"] = dataframe["created_at_display"].fillna("")
+    dataframe["documentos"] = pd.to_numeric(dataframe["documentos"], errors="coerce").fillna(0).astype(int)
+    dataframe = dataframe.sort_values(by=["created_at", "id"], ascending=[False, False]).reset_index(
+        drop=True
+    )
+    return dataframe
+
+
+def apply_filters(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Aplica filtros operacionais na base carregada."""
+    st.subheader("Filtros operacionais")
+
+    all_status = ["Todos"] + STATUS_OPTIONS
+    contratantes = ["Todos"] + sorted(dataframe["contratante"].dropna().unique().tolist())
+    motoristas = ["Todos"] + sorted(dataframe["motorista"].dropna().unique().tolist())
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        status_filtro = st.selectbox("Status", all_status, index=0)
+    with col2:
+        contratante_filtro = st.selectbox("Contratante", contratantes, index=0)
+    with col3:
+        motorista_filtro = st.selectbox("Motorista", motoristas, index=0)
+    with col4:
+        documentos_filtro = st.selectbox(
+            "Documentos",
+            ["Todos", "Com documentos", "Sem documentos"],
+            index=0,
+        )
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        placa_filtro = st.text_input("Placa", placeholder="Digite parte da placa").strip()
+    with col2:
+        destino_filtro = st.text_input("Destino", placeholder="Digite parte do destino").strip()
+    with col3:
+        datas_validas = dataframe["created_date"].dropna()
+        if datas_validas.empty:
+            data_inicial = None
+            data_final = None
+            st.caption("Data indisponivel para filtro.")
+        else:
+            data_min = min(datas_validas)
+            data_max = max(datas_validas)
+            data_inicial, data_final = st.date_input(
+                "Periodo",
+                value=(data_min, data_max),
+                min_value=data_min,
+                max_value=data_max,
+            )
+
+    filtrado = dataframe.copy()
+
+    if status_filtro != "Todos":
+        filtrado = filtrado[filtrado["status"] == status_filtro]
+    if contratante_filtro != "Todos":
+        filtrado = filtrado[filtrado["contratante"] == contratante_filtro]
+    if motorista_filtro != "Todos":
+        filtrado = filtrado[filtrado["motorista"] == motorista_filtro]
+    if documentos_filtro == "Com documentos":
+        filtrado = filtrado[filtrado["documentos"] > 0]
+    elif documentos_filtro == "Sem documentos":
+        filtrado = filtrado[filtrado["documentos"] == 0]
+    if placa_filtro:
+        filtrado = filtrado[
+            filtrado["placa"].fillna("").str.contains(placa_filtro, case=False, na=False)
+        ]
+    if destino_filtro:
+        filtrado = filtrado[
+            filtrado["destino"].fillna("").str.contains(destino_filtro, case=False, na=False)
+        ]
+    if data_inicial and data_final:
+        filtrado = filtrado[
+            filtrado["created_date"].between(data_inicial, data_final, inclusive="both")
+        ]
+
+    return filtrado.reset_index(drop=True)
+
+
+def render_status_action(dataframe: pd.DataFrame) -> None:
+    """Renderiza a atualizacao rapida de status para um frete."""
+    st.subheader("Atualizacao rapida de status")
+    frete_ids = dataframe["id"].tolist()
+    selected_id = st.selectbox(
+        "Frete",
+        options=frete_ids,
+        format_func=lambda frete_id: _format_frete_option(dataframe, frete_id),
+    )
+
+    selected_row = dataframe.loc[dataframe["id"] == selected_id].iloc[0]
+    status_atual = selected_row["status"]
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        novo_status = st.selectbox(
+            "Novo status",
+            options=STATUS_OPTIONS,
+            index=STATUS_OPTIONS.index(status_atual),
+            key=f"novo_status_{selected_id}",
+        )
+    with col2:
+        st.caption("Criado em")
+        st.write(selected_row["created_at_display"] or "-")
+
+    st.caption("Observacoes atuais")
+    st.text_area(
+        "Observacoes do frete selecionado",
+        value=selected_row["observacoes"] or "",
+        height=100,
+        disabled=True,
+        label_visibility="collapsed",
+    )
+
+    if st.button("Atualizar status", use_container_width=True):
+        try:
+            atualizado = atualizar_status_frete(selected_id, novo_status)
+        except RuntimeError as exc:
+            st.error(str(exc))
+            return
+        except ValueError as exc:
+            st.error(str(exc))
+            return
+
+        if not atualizado:
+            st.warning("Frete nao encontrado para atualizacao.")
+            return
+
+        st.session_state["status_frete_atualizado"] = True
+        st.rerun()
+
+
+def build_table_view(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Retorna a tabela amigavel para exibicao operacional."""
+    return dataframe.rename(
+        columns={
+            "id": "ID",
+            "contratante": "Contratante",
+            "origem": "Origem",
+            "destino": "Destino",
+            "motorista": "Motorista",
+            "placa": "Placa",
+            "valor_frete": "Valor Frete",
+            "status": "Status",
+            "documentos": "Documentos",
+            "created_at_display": "Criado em",
+        }
+    )[
+        [
+            "ID",
+            "Contratante",
+            "Origem",
+            "Destino",
+            "Motorista",
+            "Placa",
+            "Valor Frete",
+            "Status",
+            "Documentos",
+            "Criado em",
+        ]
+    ]
+
+
+def _format_frete_option(dataframe: pd.DataFrame, frete_id: int) -> str:
+    """Monta um rotulo curto para selecao rapida de frete."""
+    row = dataframe.loc[dataframe["id"] == frete_id].iloc[0]
+    return (
+        f"#{frete_id} | {row['contratante']} | {row['destino']} | "
+        f"{row['status']} | Docs: {row['documentos']}"
+    )
+
+
+def render_page() -> None:
+    """Renderiza a central operacional de fretes."""
+    st.title("Central operacional de fretes")
+    st.write("Filtre a operacao, consulte ocorrencias e acompanhe a rastreabilidade documental.")
+
+    try:
+        dataframe = build_fretes_dataframe()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    if st.session_state.pop("status_frete_atualizado", False):
+        st.success("Status do frete atualizado com sucesso.")
+
+    if dataframe.empty:
+        st.info("Nenhum frete cadastrado ainda.")
+        return
+
+    filtrado = apply_filters(dataframe)
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Fretes filtrados", len(filtrado.index))
+    with col2:
+        st.metric("Fretes totais", len(dataframe.index))
+    with col3:
+        st.metric("Valor filtrado", f"R$ {filtrado['valor_frete'].sum():,.2f}")
+    with col4:
+        st.metric("Docs filtrados", int(filtrado["documentos"].sum()))
+
+    st.subheader("Fretes")
+    if filtrado.empty:
+        st.info("Nenhum frete encontrado com os filtros aplicados.")
+    else:
+        st.dataframe(
+            build_table_view(filtrado),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Valor Frete": st.column_config.NumberColumn("Valor Frete", format="R$ %.2f"),
+                "Documentos": st.column_config.NumberColumn("Documentos", format="%d"),
+            },
+        )
+
+    render_status_action(filtrado if not filtrado.empty else dataframe)
+
+
+render_page()

@@ -1,0 +1,83 @@
+import streamlit as st
+
+from components.ui import info_block, metric_card, page_header, section_header
+from services.frete_service import listar_fretes
+
+
+st.set_page_config(
+    page_title="AgTransporte",
+    layout="wide",
+)
+
+
+def load_home_metrics() -> dict:
+    """Calcula os indicadores principais da tela inicial."""
+    fretes = listar_fretes()
+    em_andamento = sum(1 for frete in fretes if frete["status"] not in {"ENTREGUE", "CANCELADO"})
+    entregues = sum(1 for frete in fretes if frete["status"] == "ENTREGUE")
+    pendentes_documento = sum(1 for frete in fretes if int(frete.get("documentos", 0) or 0) == 0)
+    lucro_total = sum(float(frete.get("comissao", 0) or 0) for frete in fretes)
+
+    return {
+        "em_andamento": em_andamento,
+        "entregues": entregues,
+        "pendentes_documento": pendentes_documento,
+        "lucro_total": lucro_total,
+        "total_fretes": len(fretes),
+    }
+
+
+def render_home() -> None:
+    """Renderiza uma entrada mais profissional do produto."""
+    try:
+        metrics = load_home_metrics()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    page_header(
+        "AgTransporte",
+        "Central simples para acompanhamento operacional, documentos e resultado financeiro do frete.",
+    )
+
+    with st.container():
+        info_block(
+            "Resumo do sistema",
+            (
+                "Use o menu lateral para cadastrar fretes, consultar o dashboard operacional, "
+                "acompanhar documentos e abrir a ficha completa de cada viagem."
+            ),
+            caption=f"{metrics['total_fretes']} fretes ja registrados na base atual.",
+        )
+
+    section_header("Indicadores principais", "Visao rapida para abertura e demonstracao do produto.")
+    col1, col2 = st.columns(2)
+    with col1:
+        metric_card("Fretes em andamento", metrics["em_andamento"], "Operacoes que seguem abertas.")
+    with col2:
+        metric_card("Fretes entregues", metrics["entregues"], "Fretes finalizados com status entregue.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        metric_card(
+            "Pendentes de documento",
+            metrics["pendentes_documento"],
+            "Fretes sem arquivo vinculado no momento.",
+        )
+    with col2:
+        metric_card("Lucro total", f"R$ {metrics['lucro_total']:,.2f}", "Comissao acumulada dos fretes.")
+
+    section_header("Como navegar", "Fluxo sugerido para demonstracao e uso diario.")
+    with st.container():
+        info_block(
+            "Passos principais",
+            [
+                "1. Cadastre ou selecione as entidades base antes de abrir um frete novo.",
+                "2. Use a tela de fretes para registrar a operacao e anexar documentos.",
+                "3. Acompanhe filtros, status e resultado no dashboard.",
+                "4. Consulte a ficha de detalhe para revisar cada frete em profundidade.",
+            ],
+        )
+
+
+render_home()

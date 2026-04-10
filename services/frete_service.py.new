@@ -1,0 +1,21 @@
+from repository.frete_repo import inserir_frete, listar_fretes as listar_fretes_repo
+
+
+def criar_frete(dados: dict) -> int:
+    """Normaliza os dados basicos e delega a gravacao para o repositorio."""
+    payload = {
+        "contratante": str(dados.get("contratante", "")).strip(),
+        "origem": str(dados.get("origem", "")).strip(),
+        "destino": str(dados.get("destino", "")).strip(),
+        "motorista": str(dados.get("motorista", "")).strip(),
+        "placa": str(dados.get("placa", "")).strip().upper(),
+        "valor_frete": float(dados.get("valor_frete", 0) or 0),
+        "status": str(dados.get("status", "")).strip() or "Pendente",
+    }
+
+    return inserir_frete(payload)
+
+
+def listar_fretes() -> list[dict]:
+    """Retorna os fretes cadastrados."""
+    return listar_fretes_repo()

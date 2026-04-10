@@ -1,0 +1,81 @@
+import streamlit as st
+
+from services.frete_service import criar_frete
+
+
+st.set_page_config(
+    page_title="Fretes | AgTransporte",
+    layout="wide",
+)
+
+
+STATUS_OPTIONS = [
+    "Pendente",
+    "Carregando",
+    "Em rota",
+    "Aguardando descarga",
+    "Entregue",
+]
+
+
+def render_form() -> None:
+    """Renderiza o formulario de cadastro de fretes."""
+    st.title("Fretes")
+    st.write("Preencha os dados principais do frete para gravar no banco.")
+
+    if st.session_state.pop("frete_salvo", False):
+        st.success("Frete salvo com sucesso.")
+
+    with st.form("form_frete", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            contratante = st.text_input("Contratante")
+            origem = st.text_input("Origem")
+            motorista = st.text_input("Motorista")
+            status = st.selectbox("Status", STATUS_OPTIONS, index=0)
+        with col2:
+            destino = st.text_input("Destino")
+            placa = st.text_input("Placa")
+            valor_frete = st.number_input("Valor Frete", min_value=0.0, format="%.2f")
+
+        submitted = st.form_submit_button("Salvar frete", use_container_width=True)
+
+    if not submitted:
+        return
+
+    dados = {
+        "contratante": contratante,
+        "origem": origem,
+        "destino": destino,
+        "motorista": motorista,
+        "placa": placa,
+        "valor_frete": valor_frete,
+        "status": status,
+    }
+    campos_obrigatorios = {
+        "Contratante": contratante,
+        "Origem": origem,
+        "Destino": destino,
+        "Motorista": motorista,
+        "Placa": placa,
+    }
+    faltantes = [campo for campo, valor in campos_obrigatorios.items() if not str(valor).strip()]
+
+    if faltantes:
+        st.error(f"Preencha os campos obrigatorios: {', '.join(faltantes)}.")
+        return
+
+    try:
+        criar_frete(dados)
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+    except ValueError:
+        st.error("Informe um valor de frete valido.")
+        return
+
+    st.session_state["frete_salvo"] = True
+    st.rerun()
+
+
+render_form()

@@ -1,0 +1,23 @@
+import sqlite3
+from pathlib import Path
+
+
+DATABASE_PATH = Path(__file__).resolve().parent / "frete_app.db"
+SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
+
+
+def get_connection(db_path: str | None = None) -> sqlite3.Connection:
+    """Retorna uma conexao SQLite configurada para acesso por nome de coluna."""
+    database_path = Path(db_path) if db_path else DATABASE_PATH
+    connection = sqlite3.connect(database_path)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def init_db() -> None:
+    """Cria as tabelas do projeto caso ainda nao existam."""
+    schema = SCHEMA_PATH.read_text(encoding="utf-8")
+
+    with get_connection() as connection:
+        connection.executescript(schema)
+        connection.commit()

@@ -1,0 +1,72 @@
+import pandas as pd
+import streamlit as st
+
+from services.frete_service import listar_fretes
+
+
+st.set_page_config(
+    page_title="Dashboard | AgTransporte",
+    layout="wide",
+)
+
+
+def build_fretes_dataframe() -> pd.DataFrame:
+    """Monta a tabela real de fretes cadastrados."""
+    fretes = listar_fretes()
+    if not fretes:
+        return pd.DataFrame()
+
+    dataframe = pd.DataFrame(fretes)
+    dataframe["created_at"] = pd.to_datetime(dataframe["created_at"], errors="coerce")
+    dataframe["created_at"] = dataframe["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+
+    return dataframe.rename(
+        columns={
+            "created_at": "Data",
+            "contratante": "Contratante",
+            "origem": "Origem",
+            "destino": "Destino",
+            "motorista": "Motorista",
+            "placa": "Placa",
+            "status": "Status",
+            "valor_frete": "Valor",
+        }
+    )[
+        ["Data", "Contratante", "Origem", "Destino", "Motorista", "Placa", "Status", "Valor"]
+    ]
+
+
+def render_page() -> None:
+    """Renderiza a tela de acompanhamento operacional."""
+    st.title("Fretes em andamento")
+    st.write("Acompanhe os fretes cadastrados no banco de dados.")
+
+    try:
+        dataframe = build_fretes_dataframe()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    with st.container():
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.write("A tabela abaixo e carregada diretamente do SQLite a cada execucao da pagina.")
+        with col2:
+            st.metric("Total monitorado", len(dataframe.index))
+
+    with st.container():
+        if dataframe.empty:
+            st.info("Nenhum frete cadastrado ainda.")
+            return
+
+        st.dataframe(
+            dataframe,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
+            },
+        )
+
+
+render_page()

@@ -1,0 +1,218 @@
+import pandas as pd
+import streamlit as st
+
+from services.caminhao_service import listar_caminhoes
+from services.contratante_service import listar_contratantes
+from services.documento_service import (
+    TIPO_DOCUMENTO_OPTIONS,
+    listar_documentos_por_frete,
+    salvar_documento,
+)
+from services.frete_service import criar_frete, listar_fretes
+from services.motorista_service import listar_motoristas
+from utils.frete_status import DEFAULT_STATUS, STATUS_OPTIONS
+
+
+st.set_page_config(
+    page_title="Fretes | AgTransporte",
+    layout="wide",
+)
+
+
+def render_create_frete_section() -> None:
+    """Renderiza o formulario operacional de cadastro de fretes."""
+    st.title("Cadastro de fretes")
+    st.write("Registre rapidamente um novo frete com dados padronizados.")
+
+    try:
+        contratantes = listar_contratantes()
+        motoristas = listar_motoristas()
+        caminhoes = listar_caminhoes()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    if st.session_state.pop("frete_salvo", False):
+        st.success("Frete salvo com sucesso.")
+
+    if not contratantes or not motoristas or not caminhoes:
+        st.warning(
+            "Cadastre ao menos um contratante, um motorista e um caminhao antes de salvar fretes."
+        )
+        return
+
+    contratante_options = {item["id"]: item["nome"] for item in contratantes}
+    motorista_options = {item["id"]: item["nome"] for item in motoristas}
+    caminhao_options = {
+        item["id"]: f'{item["placa"]} - {item["modelo"] or "Modelo nao informado"}'
+        for item in caminhoes
+    }
+
+    with st.form("form_frete", clear_on_submit=True):
+        st.markdown("### Relacionamentos")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            contratante_id = st.selectbox(
+                "Contratante",
+                options=list(contratante_options.keys()),
+                format_func=lambda item_id: contratante_options[item_id],
+            )
+        with col2:
+            motorista_id = st.selectbox(
+                "Motorista",
+                options=list(motorista_options.keys()),
+                format_func=lambda item_id: motorista_options[item_id],
+            )
+        with col3:
+            caminhao_id = st.selectbox(
+                "Caminhao",
+                options=list(caminhao_options.keys()),
+                format_func=lambda item_id: caminhao_options[item_id],
+            )
+
+        st.markdown("### Dados da viagem")
+        col1, col2 = st.columns(2)
+        with col1:
+            origem = st.text_input("Origem")
+        with col2:
+            destino = st.text_input("Destino")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            valor_frete = st.number_input("Valor frete", min_value=0.0, format="%.2f")
+        with col2:
+            status = st.selectbox(
+                "Status",
+                STATUS_OPTIONS,
+                index=STATUS_OPTIONS.index(DEFAULT_STATUS),
+            )
+
+        st.markdown("### Observacoes")
+        observacoes = st.text_area(
+            "Ocorrencias ou observacoes rapidas",
+            placeholder="Ex.: coleta agendada para 14h, contato no destino, restricao de descarga...",
+            height=100,
+        )
+
+        submitted = st.form_submit_button("Salvar frete", use_container_width=True)
+
+    if not submitted:
+        return
+
+    campos_obrigatorios = {
+        "Origem": origem,
+        "Destino": destino,
+    }
+    faltantes = [campo for campo, valor in campos_obrigatorios.items() if not str(valor).strip()]
+    if faltantes:
+        st.error(f"Preencha os campos obrigatorios: {', '.join(faltantes)}.")
+        return
+
+    try:
+        criar_frete(
+            {
+                "contratante_id": contratante_id,
+                "origem": origem,
+                "destino": destino,
+                "motorista_id": motorista_id,
+                "caminhao_id": caminhao_id,
+                "valor_frete": valor_frete,
+                "status": status,
+                "observacoes": observacoes,
+            }
+        )
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+    except ValueError:
+        st.error("Informe um valor de frete valido.")
+        return
+
+    st.session_state["frete_salvo"] = True
+    st.rerun()
+
+
+def render_documentos_section() -> None:
+    """Renderiza upload e consulta simples de documentos por frete."""
+    st.markdown("---")
+    st.header("Documentos do frete")
+    st.write("Anexe evidencias simples a um frete ja existente.")
+
+    if st.session_state.pop("documento_salvo", False):
+        st.success("Documento salvo com sucesso.")
+
+    try:
+        fretes = listar_fretes()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    if not fretes:
+        st.info("Crie ao menos um frete para anexar documentos.")
+        return
+
+    frete_options = {
+        frete["id"]: f"#{frete['id']} | {frete['contratante']} | {frete['destino']} | {frete['status']}"
+        for frete in fretes
+    }
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        frete_id = st.selectbox(
+            "Frete",
+            options=list(frete_options.keys()),
+            format_func=lambda item_id: frete_options[item_id],
+        )
+    with col2:
+        tipo_documento = st.selectbox("Tipo de documento", TIPO_DOCUMENTO_OPTIONS)
+
+    arquivo = st.file_uploader(
+        "Arquivo",
+        type=None,
+        help="Envie NFe, ticket, comprovante de entrega ou outro documento relacionado ao frete.",
+    )
+
+    if st.button("Salvar documento", use_container_width=True):
+        try:
+            salvar_documento(frete_id=frete_id, tipo_documento=tipo_documento, arquivo=arquivo)
+        except RuntimeError as exc:
+            st.error(str(exc))
+            return
+        except ValueError as exc:
+            st.error(str(exc))
+            return
+
+        st.session_state["documento_salvo"] = True
+        st.rerun()
+
+    try:
+        documentos = listar_documentos_por_frete(frete_id)
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    st.subheader("Documentos vinculados")
+    if not documentos:
+        st.info("Nenhum documento vinculado ao frete selecionado.")
+        return
+
+    dataframe = pd.DataFrame(documentos)
+    dataframe["enviado_em"] = pd.to_datetime(dataframe["enviado_em"], errors="coerce")
+    dataframe["enviado_em"] = dataframe["enviado_em"].dt.strftime("%d/%m/%Y %H:%M").fillna("")
+
+    st.dataframe(
+        dataframe.rename(
+            columns={
+                "tipo_documento": "Tipo",
+                "nome_arquivo": "Arquivo",
+                "caminho_arquivo": "Caminho",
+                "enviado_em": "Enviado em",
+            }
+        )[["Tipo", "Arquivo", "Enviado em", "Caminho"]],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+render_create_frete_section()
+render_documentos_section()

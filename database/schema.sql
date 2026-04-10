@@ -1,0 +1,44 @@
+CREATE TABLE IF NOT EXISTS contratantes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT '',
+    telefone TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS motoristas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    telefone TEXT NOT NULL DEFAULT '',
+    cnh TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS caminhoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    placa TEXT NOT NULL,
+    modelo TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS fretes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contratante_id INTEGER,
+    origem TEXT NOT NULL,
+    destino TEXT NOT NULL,
+    motorista_id INTEGER,
+    caminhao_id INTEGER,
+    valor_frete REAL NOT NULL,
+    valor_pago REAL NOT NULL DEFAULT 0,
+    comissao REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    observacoes TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS frete_documentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    frete_id INTEGER NOT NULL,
+    tipo_documento TEXT NOT NULL,
+    nome_arquivo TEXT NOT NULL,
+    caminho_arquivo TEXT NOT NULL,
+    enviado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

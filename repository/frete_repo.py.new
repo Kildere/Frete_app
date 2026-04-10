@@ -1,0 +1,64 @@
+import sqlite3
+
+from database.db import get_connection, init_db
+
+
+def inserir_frete(dados: dict) -> int:
+    """Insere um frete e retorna o id gerado."""
+    init_db()
+
+    query = """
+        INSERT INTO fretes (
+            contratante,
+            origem,
+            destino,
+            motorista,
+            placa,
+            valor_frete,
+            status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    valores = (
+        dados["contratante"],
+        dados["origem"],
+        dados["destino"],
+        dados["motorista"],
+        dados["placa"],
+        dados["valor_frete"],
+        dados["status"],
+    )
+
+    try:
+        with get_connection() as connection:
+            cursor = connection.execute(query, valores)
+            connection.commit()
+            return int(cursor.lastrowid)
+    except sqlite3.Error as exc:
+        raise RuntimeError("Erro ao inserir frete no banco de dados.") from exc
+
+
+def listar_fretes() -> list[dict]:
+    """Lista os fretes cadastrados, mais recentes primeiro."""
+    init_db()
+
+    query = """
+        SELECT
+            id,
+            contratante,
+            origem,
+            destino,
+            motorista,
+            placa,
+            valor_frete,
+            status,
+            created_at
+        FROM fretes
+        ORDER BY datetime(created_at) DESC, id DESC
+    """
+
+    try:
+        with get_connection() as connection:
+            rows = connection.execute(query).fetchall()
+            return [dict(row) for row in rows]
+    except sqlite3.Error as exc:
+        raise RuntimeError("Erro ao listar fretes do banco de dados.") from exc

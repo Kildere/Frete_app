@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS fretes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contratante TEXT NOT NULL,
+    origem TEXT NOT NULL,
+    destino TEXT NOT NULL,
+    motorista TEXT NOT NULL,
+    placa TEXT NOT NULL,
+    valor_frete REAL NOT NULL,
+    status TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

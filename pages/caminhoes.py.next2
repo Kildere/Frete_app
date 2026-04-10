@@ -1,0 +1,67 @@
+import pandas as pd
+import streamlit as st
+
+from components.ui import page_header, section_header
+from services.caminhao_service import criar_caminhao, listar_caminhoes
+
+
+st.set_page_config(
+    page_title="Caminhoes | AgTransporte",
+    layout="wide",
+)
+
+
+def render_form() -> None:
+    """Renderiza o formulario de caminhoes."""
+    page_header(
+        "Cadastro de veiculos",
+        "Mantenha a frota organizada para selecao rapida no cadastro de fretes.",
+    )
+
+    if st.session_state.pop("caminhao_salvo", False):
+        st.success("Veiculo salvo com sucesso.")
+
+    with st.form("form_caminhao", clear_on_submit=True):
+        section_header("Dados do veiculo", "Cadastre apenas o essencial para uso operacional.")
+        col1, col2 = st.columns(2)
+        with col1:
+            placa = st.text_input("Placa")
+            modelo = st.text_input("Modelo")
+        with col2:
+            tipo = st.text_input("Tipo")
+
+        submitted = st.form_submit_button("Salvar veiculo", use_container_width=True)
+
+    if submitted:
+        if not placa.strip():
+            st.error("Informe a placa do veiculo.")
+        else:
+            try:
+                criar_caminhao(
+                    {
+                        "placa": placa,
+                        "modelo": modelo,
+                        "tipo": tipo,
+                    }
+                )
+            except RuntimeError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["caminhao_salvo"] = True
+                st.rerun()
+
+    try:
+        caminhoes = listar_caminhoes()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    section_header("Veiculos cadastrados", "Consulta rapida da frota disponivel.")
+    if not caminhoes:
+        st.info("Nenhum veiculo cadastrado ainda.")
+        return
+
+    st.dataframe(pd.DataFrame(caminhoes), use_container_width=True, hide_index=True)
+
+
+render_form()

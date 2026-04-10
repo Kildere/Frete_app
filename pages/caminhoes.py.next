@@ -1,0 +1,63 @@
+import pandas as pd
+import streamlit as st
+
+from services.caminhao_service import criar_caminhao, listar_caminhoes
+
+
+st.set_page_config(
+    page_title="Caminhoes | AgTransporte",
+    layout="wide",
+)
+
+
+def render_form() -> None:
+    """Renderiza o formulario de caminhoes."""
+    st.title("Caminhoes")
+    st.write("Cadastre caminhoes reutilizaveis para usar nos fretes.")
+
+    if st.session_state.pop("caminhao_salvo", False):
+        st.success("Caminhao salvo com sucesso.")
+
+    with st.form("form_caminhao", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            placa = st.text_input("Placa")
+            modelo = st.text_input("Modelo")
+        with col2:
+            tipo = st.text_input("Tipo")
+
+        submitted = st.form_submit_button("Salvar caminhao", use_container_width=True)
+
+    if submitted:
+        if not placa.strip():
+            st.error("Informe a placa do caminhao.")
+        else:
+            try:
+                criar_caminhao(
+                    {
+                        "placa": placa,
+                        "modelo": modelo,
+                        "tipo": tipo,
+                    }
+                )
+            except RuntimeError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["caminhao_salvo"] = True
+                st.rerun()
+
+    try:
+        caminhoes = listar_caminhoes()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
+
+    st.subheader("Caminhoes cadastrados")
+    if not caminhoes:
+        st.info("Nenhum caminhao cadastrado ainda.")
+        return
+
+    st.dataframe(pd.DataFrame(caminhoes), use_container_width=True, hide_index=True)
+
+
+render_form()
