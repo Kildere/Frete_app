@@ -1,3 +1,2 @@
 streamlit
 pandas
-# sqlite3 faz parte da biblioteca padrão do Python e não precisa ser instalado separadamente.
